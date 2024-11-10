@@ -22,8 +22,10 @@ impl CPU {
 
     pub fn load_command(&mut self, address: usize, command: Command) {
         let command_bytes = match command {
-            Command::ADD { x, y } => [0x01, x as u8, y as u8],
-            Command::SBC { x, y } => [0x02, x as u8, y as u8],
+            Command::ADD { x, y } => vec![0x01, x as u8, y as u8],
+            Command::SBC { x, y } => vec![0x02, x as u8, y as u8],
+            Command::NOP => vec![0x03],
+            Command::JMP { address } => vec![0x04, address as u8],
         };
         
         for (i, &byte) in command_bytes.iter().enumerate() {
@@ -33,10 +35,16 @@ impl CPU {
 
     pub fn execute_command(&mut self) {
         while self.pc < self.ram.len() {
+            let command_size = match self.fetch_command_at(self.pc) {
+                Command::ADD { .. } | Command::SBC { .. } => 3,
+                Command::NOP => 1,
+                Command::JMP { .. } => 2,
+            };
+            
             let result = self.execute_command_at(self.pc);
             println!("Command Result: {}", result);
             
-            self.pc += 3;
+            self.pc += command_size;
         }
     }
 
@@ -54,16 +62,37 @@ impl CPU {
                 self.set_register(0, result); 
                 result 
             }
+            Command::NOP => {
+                0
+            }
+            Command::JMP { address } => {
+                self.pc = address; 
+                return 0; 
+            }
         }
     }
 
     pub fn fetch_command_at(&self, address: usize) -> Command {
         let opcode = self.ram[address];
-        let x = self.ram[address + 1] as usize;
-        let y = self.ram[address + 2] as usize;
+        
         match opcode {
-            0x01 => Command::ADD { x, y },
-            0x02 => Command::SBC { x, y },
+            0x01 => {
+                let x = self.ram[address + 1] as usize;
+                let y = self.ram[address + 2] as usize;
+                Command::ADD { x, y }
+            }
+            0x02 => {
+                let x = self.ram[address + 1] as usize;
+                let y = self.ram[address + 2] as usize;
+                Command::SBC { x, y }
+            }
+            0x03 => {
+                Command::NOP
+            }
+            0x04 => {
+                let address = self.ram[address + 1] as usize;
+                Command::JMP { address }
+            }
             _ => panic!("Unknown command"),
         }
     }
@@ -72,6 +101,6 @@ impl CPU {
 pub enum Command {
     ADD { x: usize, y: usize },
     SBC { x: usize, y: usize },
-    // NOP
-    // JMP
+    NOP,
+    JMP { address: usize },
 }
